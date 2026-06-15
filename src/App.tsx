@@ -5,7 +5,7 @@ import ThreeCanvas from "./components/ThreeCanvas";
 import MainMenu from "./components/MainMenu";
 import VRScopeSim from "./components/VRScopeSim";
 import InstructionsOverlay from "./components/InstructionsOverlay";
-import { Stroke, BrushType, SavedWorld, AIBehavior } from "./types";
+import { Stroke, BrushType, SavedWorld } from "./types";
 
 export default function App() {
   // Painting & Styling State
@@ -44,12 +44,6 @@ export default function App() {
   const [microphoneActive, setMicrophoneActive] = useState(false);
   const [micVolume, setMicVolume] = useState(0.0);
 
-  // AI Behavior Generator State
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiBehavior, setAiBehavior] = useState<AIBehavior | null>(null);
-  const [isLoadingAI, setIsLoadingAI] = useState(false);
-  const [aiFeedbackMessage, setAiFeedbackMessage] = useState<string | null>(null);
-
   // Audio Context tracking refs for clean termination
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioIntervalRef = useRef<number | null>(null);
@@ -73,7 +67,6 @@ export default function App() {
       id: Math.random().toString(36).substr(2, 9),
       name,
       strokes,
-      behaviorPreset: aiBehavior,
       environment,
       createdAt: Date.now(),
     };
@@ -92,12 +85,6 @@ export default function App() {
   const handleLoadWorld = (world: SavedWorld) => {
     setStrokes(world.strokes || []);
     setEnvironment(world.environment || "space");
-    if (world.behaviorPreset) {
-      setAiBehavior(world.behaviorPreset);
-      setAiPrompt(world.behaviorPreset.description || "");
-    } else {
-      setAiBehavior(null);
-    }
   };
 
   // ----------------- PAINT BRUSH LISTENER HANDLERS -----------------
@@ -112,7 +99,6 @@ export default function App() {
   const clearAllStrokes = () => {
     if (window.confirm("Are you sure you want to flush and clear your current 3D sketchbox? This cannot be undone.")) {
       setStrokes([]);
-      setAiBehavior(null);
     }
   };
 
@@ -182,61 +168,7 @@ export default function App() {
     };
   }, []);
 
-  // ----------------- EXTEND AI ANIMATION BEHAVIORS (GEMINI) -----------------
-  const handleGenerateBehavior = async () => {
-    if (!aiPrompt.trim()) return;
-    setIsLoadingAI(true);
-    setAiFeedbackMessage(null);
 
-    // Sum total point count to provide contextual metrics to Gemini API
-    const pointsSum = strokes.reduce((acc, current) => acc + current.points.length, 0);
-
-    try {
-      const response = await fetch("/api/ai-behaviors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: aiPrompt,
-          drawingCount: strokes.length,
-          totalPoints: pointsSum,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Gateway connection failed.");
-      }
-
-      const parameters: AIBehavior = await response.json();
-      setAiBehavior(parameters);
-      setAiFeedbackMessage(`AI Controller loaded: Successfully compiled cinematic behavior "${parameters.effectName}"`);
-
-      // Adjust environment atmosphere based on Gemini recommended colors if possible
-      if (parameters.colorPalette && parameters.colorPalette.length > 0) {
-        setBrushColor(parameters.colorPalette[0]);
-      }
-      // Automate enabling kinetics if gravity was computed
-      if (parameters.gravity !== 0) {
-        setPhysicsActive(true);
-      }
-    } catch (err: any) {
-      console.error("AI dynamic compiler retrieval failed:", err);
-      setAiFeedbackMessage(`Gemini compiler error: ${err.message || "Failed to retrieve animation sequence. Verify application Secrets."}`);
-    } finally {
-      setIsLoadingAI(false);
-    }
-  };
-
-  const handleResetAIBehavior = () => {
-    setAiBehavior(null);
-    setAiPrompt("");
-    setAiFeedbackMessage("AI behavior resets completely.");
-    setPhysicsActive(false);
-  };
-
-  const handleSuggestPrompt = (suggestion: string) => {
-    setAiPrompt(suggestion);
-  };
 
   return (
     <div className="w-screen h-screen bg-[#08080c] text-slate-100 font-sans overflow-hidden flex flex-col" id="aether-paint-root">
@@ -283,12 +215,6 @@ export default function App() {
           setVrMode={setVrMode}
           microphoneActive={microphoneActive}
           toggleMicrophone={toggleMicrophone}
-          aiPrompt={aiPrompt}
-          setAiPrompt={setAiPrompt}
-          generateBehavior={handleGenerateBehavior}
-          isLoadingAI={isLoadingAI}
-          aiBehavior={aiBehavior}
-          resetAIBehavior={handleResetAIBehavior}
           strokes={strokes}
           clearAllStrokes={clearAllStrokes}
           savedWorlds={savedWorlds}
@@ -325,7 +251,6 @@ export default function App() {
             drawingDepth={drawingDepth}
             drawOnSurfaces={drawOnSurfaces}
             activeTab={selectedTool}
-            aiBehavior={aiBehavior}
             environment={environment}
             physicsActive={physicsActive}
             micVolume={micVolume}
@@ -352,27 +277,7 @@ export default function App() {
           />
 
           {/* 4. Instructions popup overlay helper */}
-          <InstructionsOverlay onSuggestPrompt={handleSuggestPrompt} />
-
-          {/* 5. Glowing alert banner feedback */}
-          {aiFeedbackMessage && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 max-w-md w-full px-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800 backdrop-blur-md shadow-2xl flex items-start gap-x-2.5 animate-in fade-in slide-in-from-top-4 duration-300" id="behavior-compile-toast">
-              <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                <Sparkles size={11} className="animate-pulse" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-200 leading-normal font-sans">
-                  {aiFeedbackMessage}
-                </p>
-              </div>
-              <button
-                onClick={() => setAiFeedbackMessage(null)}
-                className="text-slate-500 hover:text-slate-300 font-mono text-[10px] cursor-pointer"
-              >
-                [close]
-              </button>
-            </div>
-          )}
+          <InstructionsOverlay />
         </div>
       </main>
 

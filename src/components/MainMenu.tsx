@@ -17,7 +17,7 @@ import {
   Eye,
   Sliders
 } from "lucide-react";
-import { BrushType, SavedWorld, AIBehavior, Stroke } from "../types";
+import { BrushType, SavedWorld, Stroke } from "../types";
 
 interface MainMenuProps {
   currentBrush: BrushType;
@@ -40,14 +40,6 @@ interface MainMenuProps {
   // Sound Integration
   microphoneActive: boolean;
   toggleMicrophone: () => void;
-
-  // AI Integration
-  aiPrompt: string;
-  setAiPrompt: (prompt: string) => void;
-  generateBehavior: () => void;
-  isLoadingAI: boolean;
-  aiBehavior: AIBehavior | null;
-  resetAIBehavior: () => void;
 
   // Storage Persistence Operations
   strokes: Stroke[];
@@ -93,12 +85,6 @@ export default function MainMenu({
   setVrMode,
   microphoneActive,
   toggleMicrophone,
-  aiPrompt,
-  setAiPrompt,
-  generateBehavior,
-  isLoadingAI,
-  aiBehavior,
-  resetAIBehavior,
   strokes,
   clearAllStrokes,
   savedWorlds,
@@ -122,7 +108,7 @@ export default function MainMenu({
   showWaterPlane,
   setShowWaterPlane,
 }: MainMenuProps) {
-  const [activeTab, setActiveTab] = useState<"brush" | "physics" | "ai" | "worlds">("brush");
+  const [activeTab, setActiveTab] = useState<"brush" | "physics" | "worlds">("brush");
   const [newWorldName, setNewWorldName] = useState("");
   const [storageStatusMessage, setStorageStatusMessage] = useState("");
 
@@ -185,7 +171,7 @@ export default function MainMenu({
           </div>
         </div>
         <p className="text-xs text-white/50 leading-normal">
-          Doodle in 3D, simulate elastic kinematics, and request behavior controllers with server-side Gemini intelligence.
+          Doodle in 3D, simulate elastic kinematics, and style customized VR artwork designs.
         </p>
 
         {/* Global Action Toggles (Stereoscopic Split Screen VR Button) */}
@@ -219,7 +205,7 @@ export default function MainMenu({
 
       {/* Tabs list with Artistic Flair styling */}
       <div className="flex border-b border-white/10 px-4 text-xs font-medium bg-black/20 select-none">
-        {(["brush", "physics", "ai", "worlds"] as const).map((tab) => (
+        {(["brush", "physics", "worlds"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -579,103 +565,7 @@ export default function MainMenu({
           </div>
         )}
 
-        {activeTab === "ai" && (
-          <div className="space-y-5">
-            {/* Gemini API Animator */}
-            <div className="space-y-3 bg-black/40 border border-white/10 p-4 rounded-xl">
-              <div className="flex items-center gap-x-2">
-                <Sparkles size={16} className="text-cyan-400" />
-                <span className="text-[10px] text-cyan-400 font-bold uppercase font-mono tracking-widest">
-                  Gemini AI Animation Wand
-                </span>
-              </div>
-              <p className="text-xs text-white/50 leading-normal">
-                Draft a natural language request, and Gemini will analyze the prompt and compile an interactive mathematical simulation (gravity vectors, scale orbits, and neon gradients) representing your description.
-              </p>
 
-              <div className="space-y-2 pt-2">
-                <textarea
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder="e.g. float like leaves in autumn wind, or expand/collapse rapidly like a glowing heart pulse..."
-                  className="w-full h-24 p-3 rounded-lg border border-white/10 bg-[#08080c] text-xs text-white focus:outline-none focus:border-cyan-400/80 resize-none placeholder-white/30"
-                  id="ai-prompt-textarea"
-                />
-
-                <div className="flex gap-x-2">
-                  <button
-                    onClick={generateBehavior}
-                    disabled={isLoadingAI || !aiPrompt.trim()}
-                    className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 hover:opacity-90 disabled:opacity-40 disabled:from-slate-800 disabled:to-slate-800 text-black text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-x-2 cursor-pointer transition shadow-lg shadow-purple-500/20"
-                    id="ai-submit-btn"
-                  >
-                    {isLoadingAI ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-t border-black border-r" />
-                        Generating Code...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={14} />
-                        Apply AI Motion
-                      </>
-                    )}
-                  </button>
-
-                  {aiBehavior && (
-                    <button
-                      onClick={resetAIBehavior}
-                      className="p-3 rounded-xl border border-white/10 bg-black hover:bg-white/10 text-white/60 hover:text-white transition cursor-pointer"
-                      title="Reset AI Behavior"
-                      id="reset-ai-btn"
-                    >
-                      <RotateCcw size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* AI Result Card display */}
-            {aiBehavior && (
-              <div className="rounded-xl border border-purple-500/50 bg-purple-950/20 p-4 space-y-2 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-purple-400 font-mono uppercase tracking-widest font-bold">
-                    Current Motion State
-                  </span>
-                  <div className="px-2 py-0.5 rounded bg-purple-500/20 text-[9px] text-purple-300 font-bold border border-purple-500/30">
-                    {aiBehavior.effectName}
-                  </div>
-                </div>
-                <h4 className="text-xs font-bold text-slate-100 italic">
-                  "{aiBehavior.effectName}"
-                </h4>
-                <p className="text-[11px] text-white/70 leading-normal">
-                  {aiBehavior.description}
-                </p>
-
-                {/* Micro parameters readout */}
-                <div className="grid grid-cols-2 gap-2 text-[9px] font-mono border-t border-white/10 pt-2 text-white/40">
-                  <div>Gravity: <span className="text-white">{aiBehavior.gravity.toFixed(2)}</span></div>
-                  <div>Wind: <span className="text-white">y:{aiBehavior.wind.y.toFixed(1)}</span></div>
-                  <div>Osc freq: <span className="text-white">{aiBehavior.oscillationFrequency}Hz</span></div>
-                  <div>Color mode: <span className="text-white capitalize">{aiBehavior.colorMode}</span></div>
-                </div>
-
-                {/* Palette color preview */}
-                <div className="flex gap-x-1.5 pt-1">
-                  {aiBehavior.colorPalette?.map((c, i) => (
-                    <div
-                      key={i}
-                      className="w-4 h-4 rounded-full border border-black/30"
-                      style={{ backgroundColor: c, boxShadow: `0 0 6px ${c}` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {activeTab === "worlds" && (
           <div className="space-y-5">

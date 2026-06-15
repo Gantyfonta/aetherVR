@@ -1,11 +1,7 @@
 import { useState } from "react";
-import { HelpCircle, ChevronRight, X, Sparkles, Move3d } from "lucide-react";
+import { HelpCircle, X, Move3d } from "lucide-react";
 
-interface InstructionsOverlayProps {
-  onSuggestPrompt: (prompt: string) => void;
-}
-
-export default function InstructionsOverlay({ onSuggestPrompt }: InstructionsOverlayProps) {
+export default function InstructionsOverlay() {
   const [isOpen, setIsOpen] = useState(true);
 
   if (!isOpen) {
@@ -20,13 +16,6 @@ export default function InstructionsOverlay({ onSuggestPrompt }: InstructionsOve
       </button>
     );
   }
-
-  const promptSuggestions = [
-    "Make them float upwards like jellyfish in hot sea water",
-    "Force heavy gravity so everything behaves like squishy balls",
-    "Rotate like a slow spinning celestial cosmic ring",
-    "Make everything wave left and right like leaves in code matrix wind",
-  ];
 
   return (
     <div className="absolute inset-x-4 top-4 md:right-4 md:left-auto md:w-96 z-30 p-5 rounded-2xl bg-slate-950/95 border border-slate-800/80 shadow-2xl backdrop-blur-xl text-sm" id="instructions-guide">
@@ -56,29 +45,6 @@ export default function InstructionsOverlay({ onSuggestPrompt }: InstructionsOve
           <p>✍️ <strong className="text-white">Draw:</strong> Left-click & drag anywhere within the canvas depth plane.</p>
           <p>🎥 <strong className="text-white">Rotate Scene:</strong> Shift + Drag OR Right-click dragging anywhere.</p>
           <p>📐 <strong className="text-white">Change Depth:</strong> Slide the paint distance slider to sketch closer or further away!</p>
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-[11px] text-pink-400 font-semibold tracking-wider flex items-center gap-x-1 uppercase">
-            <Sparkles size={12} />
-            Ask Gemini for Dynamic Behaviours
-          </div>
-          <p className="text-slate-400 text-[11px]">
-            Input instructions in the AI block to alter physics, rotation speeds, scale thresholds, and hex gradients in real-time. Try choosing a suggestion:
-          </p>
-
-          <div className="grid grid-cols-1 gap-1.5 pt-1.5">
-            {promptSuggestions.map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => onSuggestPrompt(suggestion)}
-                className="text-left px-2.5 py-1.5 rounded bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700/80 text-[11px] text-slate-300 hover:text-white transition cursor-pointer flex items-center justify-between"
-              >
-                <span className="truncate mr-2">"{suggestion}"</span>
-                <ChevronRight size={12} className="shrink-0 text-slate-500" />
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useTransition } from "react";
 import * as THREE from "three";
-import { Stroke, BrushType, AIBehavior, StrokePoint, PhysicalState } from "../types";
+import { Stroke, BrushType, StrokePoint, PhysicalState } from "../types";
 
 interface ThreeCanvasProps {
   strokes: Stroke[];
@@ -14,7 +14,6 @@ interface ThreeCanvasProps {
   drawingDepth: number;
   drawOnSurfaces: boolean;
   activeTab: string;
-  aiBehavior: AIBehavior | null;
   environment: "space" | "neon_grid" | "matrix" | "warm_sunset" | "ocean_depths";
   physicsActive: boolean;
   micVolume: number; // 0.0 to 1.0 multiplier
@@ -42,7 +41,6 @@ export default function ThreeCanvas({
   drawingDepth,
   drawOnSurfaces,
   activeTab,
-  aiBehavior,
   environment,
   physicsActive,
   micVolume,
@@ -59,6 +57,16 @@ export default function ThreeCanvas({
 }: ThreeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isTransitioning = useTransition()[0];
+  
+  const [xrSupported, setXrSupported] = useState(false);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && (navigator as any).xr) {
+      (navigator as any).xr.isSessionSupported("immersive-vr").then((supported: boolean) => {
+        setXrSupported(supported);
+      });
+    }
+  }, []);
 
   // WebGL references
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -81,6 +89,8 @@ export default function ThreeCanvas({
   // 3D Objects & Meshes in scene mapped by stroke ID
   const strokeMeshesRef = useRef<Map<string, THREE.Line | THREE.Points | THREE.Mesh>>(new Map());
   const dummyPlaneMeshRef = useRef<THREE.Mesh | null>(null);
+  const controllerLine1Ref = useRef<THREE.Line | null>(null);
+  const controllerLine2Ref = useRef<THREE.Line | null>(null);
 
   // Dynamic physics and boids coordinate runtime data mapped by stroke ID
   const runtimeStrokeDataMapRef = useRef<Map<string, {
@@ -111,7 +121,6 @@ export default function ThreeCanvas({
     drawingDepth,
     drawOnSurfaces,
     physicsActive,
-    aiBehavior,
     micVolume,
     selectedTool,
     vrMode,
@@ -134,7 +143,6 @@ export default function ThreeCanvas({
       drawingDepth,
       drawOnSurfaces,
       physicsActive,
-      aiBehavior,
       micVolume,
       selectedTool,
       vrMode,
@@ -155,7 +163,6 @@ export default function ThreeCanvas({
     drawingDepth,
     drawOnSurfaces,
     physicsActive,
-    aiBehavior,
     micVolume,
     selectedTool,
     vrMode,
@@ -391,6 +398,111 @@ export default function ThreeCanvas({
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Enable WebXR
+    renderer.xr.enabled = true;
+
+    // Initialize temporary drawing lines for VR wands
+    const vrLineMat1 = new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 3 });
+    const vrLineMat2 = new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 3 });
+    const vrLineGeom1 = new THREE.BufferGeometry();
+    const vrLineGeom2 = new THREE.BufferGeometry();
+    const ctrlLine1 = new THREE.Line(vrLineGeom1, vrLineMat1);
+    const ctrlLine2 = new THREE.Line(vrLineGeom2, vrLineMat2);
+    ctrlLine1.visible = false;
+    ctrlLine2.visible = false;
+    scene.add(ctrlLine1);
+    scene.add(ctrlLine2);
+    controllerLine1Ref.current = ctrlLine1;
+    controllerLine2Ref.current = ctrlLine2;
+
+    // WebXR Hand Controllers & Event Handling
+    const onSelectStart = (event: any) => {
+      const controller = event.target;
+      controller.userData.isDrawing = true;
+      controller.userData.points = [];
+    };
+
+    const onSelectEnd = (event: any) => {
+      const controller = event.target;
+      controller.userData.isDrawing = false;
+      
+      const pts = controller.userData.points;
+      if (pts && pts.length >= 2) {
+        const currentProps = mutablePropsRef.current;
+        const randomHexId = Math.random().toString(36).substr(2, 9);
+        const initiatedStroke: Stroke = {
+          id: randomHexId,
+          points: [...pts],
+          color: currentProps.brushColor,
+          brushSize: currentProps.brushSize,
+          brushType: currentProps.currentBrush,
+          timestamp: Date.now(),
+          physics: {
+            velocity: { x: 0, y: 0, z: 0 },
+            position: { x: 0, y: 0, z: 0 },
+            angularVelocity: {
+              x: (Math.random() - 0.5) * 0.4,
+              y: (Math.random() - 0.5) * 0.4,
+              z: (Math.random() - 0.5) * 0.4
+            },
+            rotationOffset: { x: 0, y: 0, z: 0 },
+            active: true,
+            bounces: 0,
+            mass: currentProps.physicsMass,
+            buoyancy: currentProps.physicsBuoyancy,
+            restitution: currentProps.physicsRestitution,
+          }
+        };
+        onStrokeAdded(initiatedStroke);
+      }
+      controller.userData.points = [];
+    };
+
+    const onSqueezeStart = (event: any) => {
+      const controller = event.target;
+      controller.userData.isSqueezing = true;
+    };
+
+    const onSqueezeEnd = (event: any) => {
+      const controller = event.target;
+      controller.userData.isSqueezing = false;
+    };
+
+    const controller1 = renderer.xr.getController(0);
+    controller1.addEventListener("selectstart", onSelectStart);
+    controller1.addEventListener("selectend", onSelectEnd);
+    controller1.addEventListener("squeezestart", onSqueezeStart);
+    controller1.addEventListener("squeezeend", onSqueezeEnd);
+    scene.add(controller1);
+
+    const controller2 = renderer.xr.getController(1);
+    controller2.addEventListener("selectstart", onSelectStart);
+    controller2.addEventListener("selectend", onSelectEnd);
+    controller2.addEventListener("squeezestart", onSqueezeStart);
+    controller2.addEventListener("squeezeend", onSqueezeEnd);
+    scene.add(controller2);
+
+    // Add lovely pointer/lightwands to controllers
+    const selectLineGeom = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, -2)
+    ]);
+    const selectLineMat1 = new THREE.LineBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.5 });
+    const selectLineMat2 = new THREE.LineBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.5 });
+    
+    const coneGeom = new THREE.CylinderGeometry(0.002, 0.01, 0.15, 8);
+    coneGeom.rotateX(Math.PI / 2);
+    const coneMat1 = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+    const coneMat2 = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+
+    const wand1 = new THREE.Mesh(coneGeom, coneMat1);
+    wand1.add(new THREE.Line(selectLineGeom, selectLineMat1));
+    controller1.add(wand1);
+
+    const wand2 = new THREE.Mesh(coneGeom, coneMat2);
+    wand2.add(new THREE.Line(selectLineGeom, selectLineMat2));
+    controller2.add(wand2);
+
     // Ambient & Directional Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
@@ -481,7 +593,6 @@ export default function ThreeCanvas({
     window.addEventListener("resize", handleResize);
 
     // ----------------- ANIMATION FRAME TICKER LOOP -----------------
-    let animationId: number;
     let clock = new THREE.Clock();
 
     // Local runtime list of dynamic physics/boids mutations
@@ -491,8 +602,7 @@ export default function ThreeCanvas({
     let runtimeElapsedTime = 0;
 
     const animate = () => {
-      animationId = requestAnimationFrame(animate);
-      const dt = clock.getDelta();
+      const dt = Math.min(0.03, clock.getDelta());
       runtimeElapsedTime += dt;
 
       // Pull current props variables from the synchronized ref
@@ -502,6 +612,137 @@ export default function ThreeCanvas({
       const mainCamera = cameraMainRef.current;
 
       if (!scene || !renderer || !mainCamera) return;
+
+      // ----------------- WEBXR CONTROLLER PROCESSING FOR DRAWS/GRABS -----------------
+      if (renderer.xr.isPresenting) {
+        [controller1, controller2].forEach((c, idx) => {
+          if (!c) return;
+
+          // Update laser light colors (Wands color indicators matching brush color selection)
+          c.children.forEach((child) => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
+              child.material.color.set(currentProps.brushColor);
+            }
+          });
+
+          // 1. SELECT/TRIGGER: PAINT IN 3D SPACE
+          if (c.userData.isDrawing) {
+            if (!c.userData.points) {
+              c.userData.points = [];
+            }
+
+            const rawWorldPos = new THREE.Vector3();
+            // get position at tip of wand (wand is slightly forward)
+            rawWorldPos.setFromMatrixPosition(c.matrixWorld);
+            // Move rawWorldPos forward in direction of controller pointing vector
+            const dirVec = new THREE.Vector3(0, 0, -1).applyQuaternion(c.quaternion);
+            rawWorldPos.add(dirVec.multiplyScalar(0.15));
+
+            let shouldAdd = false;
+            if (c.userData.points.length === 0) {
+              shouldAdd = true;
+            } else {
+              const last = c.userData.points[c.userData.points.length - 1];
+              const dist = rawWorldPos.distanceTo(new THREE.Vector3(last.x, last.y, last.z));
+              if (dist > 0.02) {
+                shouldAdd = true;
+              }
+            }
+
+            if (shouldAdd) {
+              c.userData.points.push({
+                x: rawWorldPos.x,
+                y: rawWorldPos.y,
+                z: rawWorldPos.z,
+                time: Date.now()
+              });
+
+              // Dynamic drawing lines feedback
+              const ctrlLine = idx === 0 ? controllerLine1Ref.current : controllerLine2Ref.current;
+              if (ctrlLine) {
+                const drawPts: number[] = [];
+                c.userData.points.forEach((p: any) => drawPts.push(p.x, p.y, p.z));
+                ctrlLine.geometry.setAttribute("position", new THREE.Float32BufferAttribute(drawPts, 3));
+                ctrlLine.geometry.attributes.position.needsUpdate = true;
+                ctrlLine.geometry.computeBoundingSphere();
+                if (ctrlLine.material instanceof THREE.LineBasicMaterial) {
+                  ctrlLine.material.color.set(currentProps.brushColor);
+                }
+                ctrlLine.visible = true;
+              }
+            }
+          } else {
+            const ctrlLine = idx === 0 ? controllerLine1Ref.current : controllerLine2Ref.current;
+            if (ctrlLine) {
+              ctrlLine.visible = false;
+            }
+          }
+
+          // 2. SQUEEZE/GRIP: INTERACT (Eraser / Magnet / Boids Flocking)
+          if (c.userData.isSqueezing) {
+            const controllerPos = new THREE.Vector3();
+            controllerPos.setFromMatrixPosition(c.matrixWorld);
+
+            if (currentProps.selectedTool === "eraser") {
+              let targetId: string | null = null;
+              for (const [sid, mesh] of strokeMeshesRef.current.entries()) {
+                const meshPos = new THREE.Vector3();
+                meshPos.setFromMatrixPosition(mesh.matrixWorld);
+                if (controllerPos.distanceTo(meshPos) < 0.6) {
+                  targetId = sid;
+                  break;
+                }
+              }
+              if (targetId) {
+                onStrokeDeleted(targetId);
+              }
+            } else if (currentProps.selectedTool === "magnet") {
+              if (!c.userData.grabbedStrokeId) {
+                let closestStrokeId: string | null = null;
+                let minDist = 1.5;
+                for (const [sid, mesh] of strokeMeshesRef.current.entries()) {
+                  const meshPos = new THREE.Vector3();
+                  meshPos.setFromMatrixPosition(mesh.matrixWorld);
+                  const dist = controllerPos.distanceTo(meshPos);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    closestStrokeId = sid;
+                  }
+                }
+                if (closestStrokeId) {
+                  c.userData.grabbedStrokeId = closestStrokeId;
+                }
+              } else {
+                const grabbedId = c.userData.grabbedStrokeId;
+                const d = runtimeStrokeDataMap.get(grabbedId);
+                const mesh = strokeMeshesRef.current.get(grabbedId);
+                if (d && mesh) {
+                  const targetPoint = new THREE.Vector3();
+                  targetPoint.setFromMatrixPosition(c.matrixWorld);
+                  
+                  d.position.x = targetPoint.x;
+                  d.position.y = targetPoint.y;
+                  d.position.z = targetPoint.z;
+                  mesh.position.copy(targetPoint);
+
+                  const controllerQuat = new THREE.Quaternion();
+                  c.getWorldQuaternion(controllerQuat);
+                  mesh.quaternion.copy(controllerQuat);
+                  
+                  d.velocity = { x: 0, y: 0, z: 0 };
+                  d.angularVelocity = {
+                    x: (Math.random() - 0.5) * 1.5,
+                    y: (Math.random() - 0.5) * 1.5,
+                    z: (Math.random() - 0.5) * 1.5
+                  };
+                }
+              }
+            }
+          } else {
+            c.userData.grabbedStrokeId = null;
+          }
+        });
+      }
 
       // ----------------- ANIMATE AMBIENT DECORATIONS -----------------
       if (environmentDecorationsRef.current) {
@@ -624,11 +865,6 @@ export default function ThreeCanvas({
             let gravityScalar = currentProps.physicsGravity; // standard -9.8
             let windForce = { x: 0, y: 0, z: 0 };
 
-            if (currentProps.aiBehavior) {
-              gravityScalar = currentProps.aiBehavior.gravity * 8.0;
-              windForce = currentProps.aiBehavior.wind;
-            }
-
             // Newtonian gravity
             data.velocity.y += gravityScalar * dt;
 
@@ -737,40 +973,12 @@ export default function ThreeCanvas({
           }
         } else {
           // Physics is disabled, let's keep positions normalized at origin or clear
-          // unless AI Behavior triggers custom orbits/pulses without full gravity body fall.
-          if (currentProps.aiBehavior) {
-            const behave = currentProps.aiBehavior;
-
-            // Continuous rotation
-            data.rotation.x += (behave.rotation.x || 0) * dt * 10;
-            data.rotation.y += (behave.rotation.y || 0) * dt * 10;
-            data.rotation.z += (behave.rotation.z || 0) * dt * 10;
-            mesh.rotation.set(data.rotation.x, data.rotation.y, data.rotation.z);
-
-            // Sine Floating / Oscillation Wave logic
-            if (behave.oscillationAmplitude > 0) {
-              const freq = behave.oscillationFrequency || 1.0;
-              const amp = behave.oscillationAmplitude || 0.1;
-              const offsetY = Math.sin(runtimeElapsedTime * freq + stroke.timestamp % 100) * amp * 3.0;
-              mesh.position.y = offsetY;
-              data.position.y = offsetY;
-            }
-
-            // Pulsing scale cycle
-            if (behave.scaleSpeed !== 0) {
-              const freq = (behave.scaleSpeed > 0 ? behave.scaleSpeed : 0.05) * 50;
-              const currentScale = 1.0 + Math.sin(runtimeElapsedTime * freq) * 0.2;
-              mesh.scale.set(currentScale, currentScale, currentScale);
-            }
-          } else {
-            // Reset transforms if all physics & AI behaviors are turned off
-            mesh.position.set(0, 0, 0);
-            mesh.rotation.set(0, 0, 0);
-            mesh.scale.set(1, 1, 1);
-            data.position = { x: 0, y: 0, z: 0 };
-            data.velocity = { x: 0, y: 0, z: 0 };
-            data.rotation = { x: 0, y: 0, z: 0 };
-          }
+          mesh.position.set(0, 0, 0);
+          mesh.rotation.set(0, 0, 0);
+          mesh.scale.set(1, 1, 1);
+          data.position = { x: 0, y: 0, z: 0 };
+          data.velocity = { x: 0, y: 0, z: 0 };
+          data.rotation = { x: 0, y: 0, z: 0 };
         }
 
         // Apply mic loudness scale animation feedback
@@ -778,16 +986,6 @@ export default function ThreeCanvas({
           const audioAmp = 1.0 + currentProps.micVolume * 1.4;
           // Apply on mesh scaling
           mesh.scale.set(audioAmp, audioAmp, audioAmp);
-
-          // Fluctuating colors if audio mode triggered
-          if (mesh instanceof THREE.Line && currentProps.aiBehavior?.colorMode === "audioReactive") {
-            const colors = currentProps.aiBehavior.colorPalette;
-            if (colors && colors.length > 0) {
-              const pulseIdx = Math.floor(runtimeElapsedTime * 10) % colors.length;
-              const matchColor = new THREE.Color(colors[pulseIdx]);
-              (mesh.material as THREE.LineBasicMaterial).color.copy(matchColor);
-            }
-          }
         }
       });
 
@@ -955,10 +1153,13 @@ export default function ThreeCanvas({
       }
     };
 
-    animate();
+    // Start main animation loop of Threejs compatible with WebXR
+    renderer.setAnimationLoop(animate);
 
     return () => {
-      cancelAnimationFrame(animationId);
+      if (rendererRef.current) {
+        rendererRef.current.setAnimationLoop(null);
+      }
       window.removeEventListener("resize", handleResize);
       if (rendererRef.current && containerRef.current) {
         try {
@@ -1329,6 +1530,28 @@ export default function ThreeCanvas({
         <span>🌌 <b className="text-white">Shift + Drag / Right-click</b> to Rotate Scene</span>
         <span>🎨 Tool Selected: <b className="text-emerald-400 capitalize">{selectedTool}</b></span>
       </div>
+
+      {/* Premium WebXR Immersive Entrance Button for Oculus Quest 2 */}
+      {xrSupported && (
+        <button
+          onClick={async () => {
+            if (typeof navigator !== "undefined" && (navigator as any).xr && rendererRef.current) {
+              try {
+                const session = await (navigator as any).xr.requestSession("immersive-vr", {
+                  optionalFeatures: ["local-floor", "bounded-floor", "hand-tracking"]
+                });
+                await rendererRef.current.xr.setSession(session);
+              } catch (err: any) {
+                alert("Oculus Quest 2 VR Activation Failed: " + err.message);
+              }
+            }
+          }}
+          className="absolute bottom-16 right-4 z-30 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-400 hover:scale-105 text-slate-950 text-xs font-black uppercase tracking-[0.15em] flex items-center gap-x-2 shadow-[0_0_20px_rgba(16,185,129,0.5)] cursor-pointer transition border border-emerald-400/30 animate-pulse"
+          id="enter-quest2-vr-btn"
+        >
+          <span>🥽 Start Immersive Quest 2 VR</span>
+        </button>
+      )}
 
       {/* Loading state visual indicator for responsive canvas changes */}
       {isTransitioning && (

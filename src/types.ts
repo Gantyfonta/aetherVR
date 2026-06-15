@@ -50,7 +50,7 @@ export interface SavedWorld {
   id: string;
   name: string;
   strokes: Stroke[];
-  behaviorPreset: AIBehavior | null;
+  behaviorPreset?: AIBehavior | null;
   environment: "space" | "neon_grid" | "matrix" | "warm_sunset" | "ocean_depths";
   createdAt: number;
 }
