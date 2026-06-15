@@ -1,0 +1,8 @@
+{
+  "name": "3D VR Paint & Dynamics Simulator",
+  "description": "An immersive 3D/VR platform allowing users to sketch glowing paths in virtual space, toggle gravity/wind physics, simulate boids, and request custom AI-generated animations with Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
